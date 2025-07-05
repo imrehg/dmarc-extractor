@@ -1,0 +1,20 @@
+[project]
+name = "dmarc-extractor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "defusedxml>=0.7.1",
+    "dynaconf>=3.2.11",
+    "jmapc",
+    "requests>=2.32.4",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]
+
+[tool.uv.sources]
+jmapc = { path = "jmapc", editable = true }
