@@ -1,4 +1,5 @@
 import datetime
+import ipaddress
 import logging
 import os
 from dataclasses import dataclass, field
@@ -9,11 +10,17 @@ import requests
 from dataclasses_json import config
 from dynaconf import Dynaconf
 
-from jmapc import (Client, EmailQueryFilterCondition,
-                   MailboxQueryFilterCondition, Ref)
-from jmapc.methods import (CustomMethod, EmailGet, EmailQuery, IdentityGet,
-                           IdentityGetResponse, MailboxGet, MailboxGetResponse,
-                           MailboxQuery)
+from jmapc import Client, EmailQueryFilterCondition, MailboxQueryFilterCondition, Ref
+from jmapc.methods import (
+    CustomMethod,
+    EmailGet,
+    EmailQuery,
+    IdentityGet,
+    IdentityGetResponse,
+    MailboxGet,
+    MailboxGetResponse,
+    MailboxQuery,
+)
 from jmapc.methods.base import Get, GetResponse
 
 # Create basic console logger
@@ -25,11 +32,11 @@ log.setLevel(logging.DEBUG)
 
 import gzip
 import tempfile
+from typing import Optional, Union
 
+import geoip2.database
+import geoip2.webservice
 from defusedxml.ElementTree import parse as xml_parse
-
-# from defusedxml.ElementTree import etree
-
 
 settings = Dynaconf(
     envvar_prefix="MYPROGRAM",
@@ -229,6 +236,27 @@ def main():
     )
     # get_identity(mail_client)
     mailbox_query(mail_client)
+
+
+def ip_lookup(ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address]):
+    """WIP checks for IP addresses from local GeoLite2 databases"""
+    with (
+        geoip2.database.Reader("/var/lib/GeoIP/GeoLite2-City.mmdb") as city_reader,
+        geoip2.database.Reader("/var/lib/GeoIP/GeoLite2-ASN.mmdb") as asn_reader,
+    ):
+        response = city_reader.city(ip)
+        print(response.country.iso_code)
+        print(response.country.name)
+        print(response.continent.name)
+        if len(response.subdivisions) > 0:
+            print(response.subdivisions[0].name)
+        print(response.city.name)
+        print(response.location.latitude, response.location.longitude)
+        print(response.postal.code)
+
+        asn_response = asn_reader.asn(ip)
+        print(asn_response.autonomous_system_number)
+        print(asn_response.autonomous_system_organization)
 
 
 if __name__ == "__main__":

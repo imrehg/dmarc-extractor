@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "defusedxml>=0.7.1",
     "dynaconf>=3.2.11",
+    "geoip2>=5.1.0",
     "jmapc>=0.2.23",
     "requests>=2.32.4",
 ]
