@@ -1,40 +1,33 @@
-import os
-
-from jmapc import Client
-from jmapc.methods import IdentityGet, IdentityGetResponse
-from dynaconf import Dynaconf
-import requests
-from jmapc import Client, MailboxQueryFilterCondition, EmailQueryFilterCondition, Ref
-from jmapc.methods import (
-    MailboxGet,
-    MailboxGetResponse,
-    MailboxQuery,
-    EmailQuery,
-    EmailGet,
-    CustomMethod,
-    BlobGet,
-    BlobGetResponse,
-)
-from jmapc.methods.base import Get, GetResponse
-
-from pathlib import Path
-
-from dataclasses import dataclass, field
-from typing import Optional
-
-from dataclasses_json import config
-
 import datetime
 import logging
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+import requests
+from dataclasses_json import config
+from dynaconf import Dynaconf
+
+from jmapc import (Client, EmailQueryFilterCondition,
+                   MailboxQueryFilterCondition, Ref)
+from jmapc.methods import (CustomMethod, EmailGet, EmailQuery, IdentityGet,
+                           IdentityGetResponse, MailboxGet, MailboxGetResponse,
+                           MailboxQuery)
+from jmapc.methods.base import Get, GetResponse
+
 # Create basic console logger
 logging.basicConfig()
 from jmapc.logging import log
+
 # Set jmapc log level to DEBUG
 log.setLevel(logging.DEBUG)
 
-import tempfile
 import gzip
+import tempfile
+
 from defusedxml.ElementTree import parse as xml_parse
+
 # from defusedxml.ElementTree import etree
 
 
@@ -45,21 +38,6 @@ settings = Dynaconf(
     load_dotenv=True,
     env_switcher="MYPROGRAM_ENV",
 )
-
-
-
-# @dataclass
-# class Blob(Model):
-#     id: Optional[str] = field(metadata=config(field_name="id"), default=None)
-
-# class BlobBase:
-#     method_namespace: Optional[str] = "Blob"
-#     using = {"urn:ietf:params:jmap:blob"}
-
-# @dataclass
-# class BlobGet(BlobBase, Get):
-#     pass
-
 
 
 def get_identity(client: Client) -> None:
@@ -85,29 +63,58 @@ def get_identity(client: Client) -> None:
 
 def dmarcprint(root):
 
-    rpt_md = root.find('report_metadata')
-    
-    org_name = rpt_md.find('org_name').text
-    begtime = datetime.datetime.fromtimestamp(int(rpt_md.find('date_range').find('begin').text))
-    endtime = datetime.datetime.fromtimestamp(int(rpt_md.find('date_range').find('end').text))
-    
-    print("Report from "+org_name+" for "+str(begtime)+" to "+str(endtime)+":")
-    
-    for record in root.findall('record'):
-        restext = record.find('row').find('policy_evaluated').find('disposition').text
-        if restext=="none":
-            restext="Pass"
-        spftext=" SPF: "+record.find('row').find('policy_evaluated').find('spf').text
-        dkimtext=" DKIM: "+record.find('row').find('policy_evaluated').find('dkim').text
-        for sres in record.find('auth_results').findall('spf'):
-            spftext += " Domain: "+sres.find('domain').text+" "+sres.find('result').text+"ed."
-        for dres in record.find('auth_results').findall('dkim'):
-            dkimtext += " Domain: "+dres.find('domain').text+" "+dres.find('result').text+"ed."
-    
-        print(record.find('row').find('count').text+" from "+record.find('row').find('source_ip').text+": "+restext)
+    rpt_md = root.find("report_metadata")
+
+    org_name = rpt_md.find("org_name").text
+    begtime = datetime.datetime.fromtimestamp(
+        int(rpt_md.find("date_range").find("begin").text)
+    )
+    endtime = datetime.datetime.fromtimestamp(
+        int(rpt_md.find("date_range").find("end").text)
+    )
+
+    print(
+        "Report from " + org_name + " for " + str(begtime) + " to " + str(endtime) + ":"
+    )
+
+    for record in root.findall("record"):
+        restext = record.find("row").find("policy_evaluated").find("disposition").text
+        if restext == "none":
+            restext = "Pass"
+        spftext = (
+            " SPF: " + record.find("row").find("policy_evaluated").find("spf").text
+        )
+        dkimtext = (
+            " DKIM: " + record.find("row").find("policy_evaluated").find("dkim").text
+        )
+        for sres in record.find("auth_results").findall("spf"):
+            spftext += (
+                " Domain: "
+                + sres.find("domain").text
+                + " "
+                + sres.find("result").text
+                + "ed."
+            )
+        for dres in record.find("auth_results").findall("dkim"):
+            dkimtext += (
+                " Domain: "
+                + dres.find("domain").text
+                + " "
+                + dres.find("result").text
+                + "ed."
+            )
+
+        print(
+            record.find("row").find("count").text
+            + " from "
+            + record.find("row").find("source_ip").text
+            + ": "
+            + restext
+        )
         print(spftext)
         print(dkimtext)
         print("")
+
 
 def mailbox_query(client: Client) -> None:
     # EmailBodyPart(part_id='2', blob_id='G3839cbb8f679f9f2e619696455b909e573c1d6c2', size=429, headers=None, name='yahoo.com!imreh.net!1751241600!1751327999.xml.gz', type='application/gzip', charset=None, disposition='attachment', cid=None, language=None, location=None, sub_parts=None)
@@ -117,15 +124,11 @@ def mailbox_query(client: Client) -> None:
     account_id = "u4be94060"
 
     blob_data = {
-        "accountId" : account_id,
-        "ids" : [
+        "accountId": account_id,
+        "ids": [
             blob_id,
         ],
-        "properties" : [
-            "data:asText",
-            "digest:sha",
-            "size"
-        ]
+        "properties": ["data:asText", "digest:sha", "size"],
     }
 
     methods = [
@@ -141,15 +144,14 @@ def mailbox_query(client: Client) -> None:
         EmailGet(
             ids=Ref("/ids"),
             properties=["blobId", "messageId", "attachments", "bodyValues"],
-            fetch_all_body_values=True
+            fetch_all_body_values=True,
         ),
         # BlobGet(ids=[blob_id])
     ]
 
-
     # Call JMAP API with the prepared request
     results = client.request(methods)
-    print(">"*10) 
+    print(">" * 10)
 
     print(results[2])
     print(results[3])
@@ -171,13 +173,12 @@ def mailbox_query(client: Client) -> None:
             print(blob_id)
             with tempfile.NamedTemporaryFile() as f:
                 client.download_attachment(attachment, f.name)
-                if attachment.type == 'application/gzip':
-                    with gzip.open(f.name, 'rb') as a:
+                if attachment.type == "application/gzip":
+                    with gzip.open(f.name, "rb") as a:
                         # file_content = a.read()
                         et = xml_parse(a)
                         # print(et)
                         dmarcprint(et)
-
 
     # https://beta.fastmailusercontent.com/jmap/download/u4be94060/G59ddf84c242974cdf6e4819b1bcd0501aa89dce1/google.com!imreh.net!1749772800!1749859199.zip?type=application%2Fzip&u=4be94060&access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwMWY3ZDhhZWZkMjNjNTUxNjAyNmQ3MTM2NDY3MjAyNyIsInN1YiI6IkYzdm16MkxzVVRHd0dBVHJXTF9fcVhEV3Y1WW8yVHY1NG9hRXJqSTg1ckkiLCJpYXQiOjE3NTE2OTUyMDB9.4dVKFvsGsogPd6jgXo6AX2n6kLNLCCebpgXkY1ce2H4&download=1
 

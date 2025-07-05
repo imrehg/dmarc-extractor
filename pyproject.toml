@@ -7,14 +7,17 @@ requires-python = ">=3.13"
 dependencies = [
     "defusedxml>=0.7.1",
     "dynaconf>=3.2.11",
-    "jmapc",
+    "jmapc>=0.2.23",
     "requests>=2.32.4",
 ]
 
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "flake8>=7.3.0",
+    "isort>=6.0.1",
+    "pre-commit>=4.2.0",
 ]
 
-[tool.uv.sources]
-jmapc = { path = "jmapc", editable = true }
+# [tool.uv.sources]
+# jmapc = { path = "jmapc", editable = true }
