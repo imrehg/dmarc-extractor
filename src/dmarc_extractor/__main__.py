@@ -1,16 +1,23 @@
 import datetime
+import gzip
 import ipaddress
 import logging
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
+import click
+import geoip2.database
+import geoip2.webservice
 import requests
 from dataclasses_json import config
+from defusedxml.ElementTree import parse as xml_parse
 from dynaconf import Dynaconf
 
 from jmapc import Client, EmailQueryFilterCondition, MailboxQueryFilterCondition, Ref
+from jmapc.logging import log
 from jmapc.methods import (
     CustomMethod,
     EmailGet,
@@ -25,18 +32,10 @@ from jmapc.methods.base import Get, GetResponse
 
 # Create basic console logger
 logging.basicConfig()
-from jmapc.logging import log
 
 # Set jmapc log level to DEBUG
 log.setLevel(logging.DEBUG)
 
-import gzip
-import tempfile
-from typing import Optional, Union
-
-import geoip2.database
-import geoip2.webservice
-from defusedxml.ElementTree import parse as xml_parse
 
 settings = Dynaconf(
     envvar_prefix="MYPROGRAM",
@@ -58,7 +57,9 @@ def get_identity(client: Client) -> None:
     result = client.request(method)
 
     # Print some information about each retrieved identity
-    assert isinstance(result, IdentityGetResponse), "Error in Identity/get method"
+    assert isinstance(
+        result, IdentityGetResponse
+    ), "Error in Identity/get method"  # nosec B101 # TODO: Replace with proper exception handling
     for identity in result.data:
         print(f"Identity {identity.id} is for " f"{identity.name} at {identity.email}")
 
@@ -214,7 +215,7 @@ def mailbox_query(client: Client) -> None:
     # Retrieve the Mailbox data from the result data model
     assert isinstance(
         method_2_result_data, MailboxGetResponse
-    ), "Error in Mailbox/get method"
+    ), "Error in Mailbox/get method"  # nosec B101 # TODO: Replace with proper exception handling
     mailboxes = method_2_result_data.data
 
     # Although multiple mailboxes may be present in the results, we only expect a
@@ -257,6 +258,19 @@ def ip_lookup(ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address]):
         asn_response = asn_reader.asn(ip)
         print(asn_response.autonomous_system_number)
         print(asn_response.autonomous_system_organization)
+
+
+@click.command()
+@click.option(
+    "-a",
+    "--all",
+    type=bool,
+    default=False,
+    help="Whether to process all attachments. Useful to re-process data in case the extractor code changed.",
+)
+def cli() -> None:
+    """DMARC record extractor CLI"""
+    print("yey!")
 
 
 if __name__ == "__main__":

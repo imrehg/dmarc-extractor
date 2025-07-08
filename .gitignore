@@ -1,1 +1,8 @@
+.venv
+
+# Potentially sensitive files
 .secrets*
+*.local.*
+
+# Caches
+__pycache__
