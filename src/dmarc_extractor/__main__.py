@@ -4,6 +4,7 @@ import ipaddress
 import logging
 import os
 import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
@@ -85,6 +86,8 @@ def dmarcprint(root):
         "Report from " + org_name + " for " + str(begtime) + " to " + str(endtime) + ":"
     )
 
+    return
+    # TODO: fix up format
     for record in root.findall("record"):
         restext = record.find("row").find("policy_evaluated").find("disposition").text
         if restext == "none":
@@ -124,28 +127,36 @@ def dmarcprint(root):
         print("")
 
 
-def mailbox_query(client: Client) -> None:
+def mailbox_query(
+    client: Client, all=False, save_attachment_path: Path | None = None
+) -> None:
     # EmailBodyPart(part_id='2', blob_id='G3839cbb8f679f9f2e619696455b909e573c1d6c2', size=429, headers=None, name='yahoo.com!imreh.net!1751241600!1751327999.xml.gz', type='application/gzip', charset=None, disposition='attachment', cid=None, language=None, location=None, sub_parts=None)
     print(client.jmap_session)
 
-    blob_id = "G3839cbb8f679f9f2e619696455b909e573c1d6c2"
-    account_id = "u4be94060"
+    # blob_id = "G3839cbb8f679f9f2e619696455b909e573c1d6c2"
+    # account_id = "u4be94060"
 
-    blob_data = {
-        "accountId": account_id,
-        "ids": [
-            blob_id,
-        ],
-        "properties": ["data:asText", "digest:sha", "size"],
-    }
+    # blob_data = {
+    #     "accountId": account_id,
+    #     "ids": [
+    #         blob_id,
+    #     ],
+    #     "properties": ["data:asText", "digest:sha", "size"],
+    # }
+
+    if all:
+        after_filter = None
+    else:
+        # TODO: make this incremental
+        after_filter = datetime.datetime.now() - datetime.timedelta(days=5)
 
     methods = [
         MailboxQuery(filter=MailboxQueryFilterCondition(name="DMARC")),
         MailboxGet(ids=Ref("/ids")),
         EmailQuery(
             filter=EmailQueryFilterCondition(
-                to="dmarc@imreh.net",
-                after=datetime.datetime.now() - datetime.timedelta(days=5),
+                to="dmarc@*",
+                after=after_filter,
                 has_attachment=True,
             ),
         ),
@@ -167,6 +178,9 @@ def mailbox_query(client: Client) -> None:
     account_id = results[3].response.account_id
     jmap_base_url = settings.jmap_host
     print("+" * 10)
+
+    reports = []
+
     for mail in results[3].response.data:
 
         # print(mail)
@@ -176,17 +190,34 @@ def mailbox_query(client: Client) -> None:
             print(attachment)
             blob_id = attachment.blob_id
             file_name = attachment.name
-            local_path = Path("attachments") / file_name
-            # attachment.
-            print(blob_id)
-            with tempfile.NamedTemporaryFile() as f:
+            if save_attachment_path is not None:
+
+                def file_creator():
+                    return open(save_attachment_path / file_name, "wb")
+
+            else:
+                file_creator = tempfile.NamedTemporaryFile
+
+            with file_creator() as f:
                 client.download_attachment(attachment, f.name)
+
                 if attachment.type == "application/gzip":
                     with gzip.open(f.name, "rb") as a:
-                        # file_content = a.read()
                         et = xml_parse(a)
-                        # print(et)
-                        dmarcprint(et)
+                elif attachment.type == "application/zip":
+                    with zipfile.ZipFile(f.name, "r") as zf:
+                        with zf.open(zf.namelist()[0], "r") as a:
+                            et = xml_parse(a)
+                else:
+                    # TODO: warning log
+                    print(
+                        f"Unknown attachment type of {attachment.type}; won't handle."
+                    )
+                    continue
+
+                reports.append(et)
+
+    return reports
 
     # https://beta.fastmailusercontent.com/jmap/download/u4be94060/G59ddf84c242974cdf6e4819b1bcd0501aa89dce1/google.com!imreh.net!1749772800!1749859199.zip?type=application%2Fzip&u=4be94060&access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwMWY3ZDhhZWZkMjNjNTUxNjAyNmQ3MTM2NDY3MjAyNyIsInN1YiI6IkYzdm16MkxzVVRHd0dBVHJXTF9fcVhEV3Y1WW8yVHY1NG9hRXJqSTg1ckkiLCJpYXQiOjE3NTE2OTUyMDB9.4dVKFvsGsogPd6jgXo6AX2n6kLNLCCebpgXkY1ce2H4&download=1
 
@@ -204,7 +235,6 @@ def mailbox_query(client: Client) -> None:
     #         if chunk: # filter out keep-alive new chunks
     #             f.write(chunk)
     #             # f.flush() commented by recommendation from J.F.Sebastian
-    return
     # Retrieve the InvocationResponse for the second method. The InvocationResponse
     # contains the client-provided method ID, and the result data model.
     method_2_result = results[1]
@@ -239,6 +269,12 @@ def main():
     mailbox_query(mail_client)
 
 
+def attachment_extract(
+    mail_client: Client, all=False, save_attachment_path=Path | None
+):
+    return mailbox_query(mail_client, all, save_attachment_path)
+
+
 def ip_lookup(ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address]):
     """WIP checks for IP addresses from local GeoLite2 databases"""
     with (
@@ -267,10 +303,25 @@ def ip_lookup(ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address]):
     type=bool,
     default=False,
     help="Whether to process all attachments. Useful to re-process data in case the extractor code changed.",
+    show_default=True,
+    is_flag=True,
 )
-def cli() -> None:
+@click.option(
+    "--save-attachment-path",
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, writable=True, path_type=Path
+    ),
+)
+def cli(all=bool, save_attachment_path=Path | None) -> None:
     """DMARC record extractor CLI"""
-    print("yey!")
+    # Extract
+    mail_client = Client.create_with_api_token(
+        host=settings.jmap_host, api_token=settings.jmap_api_token
+    )
+    reports: list[dict] = attachment_extract(mail_client, all, save_attachment_path)
+    # Transform
+    print(reports)
+    # Load
 
 
 if __name__ == "__main__":
